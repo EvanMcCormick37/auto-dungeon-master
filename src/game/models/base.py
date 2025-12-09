@@ -56,15 +56,20 @@ class Base:
     id: str
     name: str | None
     description: str
-
 # Temporary or permanent status effects.
 class Status(Base):
     bonuses: Attributes | None
+
+# A condition which must be met for something to occur. Could be contained in Description, could be a skill check. Requirements checked by cross-encoder.
+class Requirement(Base):
+    involved_ids: List[str] | None
+    check: dict[Attribute: int]
 
 # A possible action to take.
 class Action(Base):
     type: TargetType | None
     base_attribute: Attribute | None
+    requires: List[Requirement] | None
 
 # Attack action.
 class AttackStats:
@@ -84,10 +89,7 @@ class Feat(Base):
     status: Status | None
     actions: List[Action] | None
 
-# A condition which must be met for something to occur. Could be contained in Description, could be a skill check. Requirements checked by cross-encoder.
-class Requirement(Base):
-    involved_ids: List[str] | None
-    check: dict[Attribute: int]
+
 # Lore is knowledge of the world, history or characters. Ties together different involved entities.
 class Lore(Base):
     type: LoreType

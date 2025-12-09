@@ -20,9 +20,9 @@ class Door(Location):
     trap: Trap | None
 
 class Room(Location):
-    doors: List[Door] | None
-    occupants: List[Entity] | None
-    items: List[Item] | None
+    doors: List[Door | str] | None
+    occupants: List[Entity | str] | None
+    items: List[Item | str] | None
 
 class Level(Base):
     room_ids: List[str]

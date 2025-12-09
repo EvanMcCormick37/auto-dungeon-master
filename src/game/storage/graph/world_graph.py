@@ -1,5 +1,5 @@
 """
-WorldGraph: NetworkX-based graph database for entity relationships.
+WorldGraph: NetworkX-based graph database for grunt relationships.
 
 Manages spatial relationships (rooms, doors, levels) and narrative relationships
 (characters, lore, story beats) using a directed multigraph.
@@ -20,38 +20,39 @@ class NodeType(str, Enum):
     LEVEL = "level"
     ROOM = "room"
     DOOR = "door"
-    ENTITY = "entity"
+    GRUNT = "grunt"
     ITEM = "item"
     MACGUFFIN = "macguffin"
     LORE = "lore"
     TRAP = "trap"
     PLAYER = "player"
+    REQUIREMENT = "requirement"
 
 
 class EdgeType(str, Enum):
     """Types of relationships between nodes."""
     # Spatial relationships
-    CONTAINS = "contains"           # level -> room, room -> item
+    CONTAINS = "contains"           # Location|Location|grunt|Item|PlayerCharacter
     CONNECTS_TO = "connects_to"     # room <-> door
     
-    # Entity relationships
-    LOCATED_IN = "located_in"       # entity -> room
-    OWNS = "owns"                   # entity -> item
-    EQUIPPED = "equipped"           # entity -> item
+    # grunt relationships
+    LOCATED_IN = "located_in"       # grunt -> room
+    OWNS = "owns"                   # grunt -> item
+    EQUIPPED = "equipped"           # grunt -> item
     
     # Narrative relationships
-    KNOWS = "knows"                 # entity -> entity (acquaintance)
-    KNOWS_ABOUT = "knows_about"     # entity -> lore/macguffin
-    INVOLVES = "involves"           # lore -> entity/item/location
-    RELATED_TO = "related_to"       # lore <-> lore
+    WANTS = "wants"                 # character -> Base
+    HATES = "hates"                 # character -> grunt|PlayerCharacter|Item
+    FEARS = "fears"                 # character -> Base
+    FRIENDLY = "friendly"           # grunt <-> grunt (acquaintance)
+    KNOWS_ABOUT = "knows_about"     # grunt -> lore/macguffin
+    SEES = "sees"                   # grunt -> Location|grunt|Item|PlayerCharacter
     
     # Story progression
-    TRIGGERS = "triggers"           # lore(moment) -> lore(moment)
-    REQUIRES = "requires"           # action -> requirement
-    GUARDS = "guards"               # entity -> door/item/room
-    
-    # Trap relationships
-    PROTECTS = "protects"           # trap -> room/door/item
+    INVOLVES = "involves"           # Lore -> Base
+    REQUIRES = "requires"           # Lore|Requirement -> Base
+    TRIGGERS = "triggers"           # Requirement -> Lore|Action
+    GUARDS = "guards"               # Grunt -> door/item/room
 
 
 @dataclass
@@ -107,7 +108,7 @@ class WorldGraph:
         
         Args:
             node_id: Unique identifier for the node
-            node_type: Type of node (level, room, entity, etc.)
+            node_type: Type of node (level, room, grunt, etc.)
             name: Display name
             **attributes: Additional node attributes
         """
@@ -340,43 +341,43 @@ class WorldGraph:
         ]
     
     # =========================================================================
-    # CONVENIENCE METHODS: ENTITIES
+    # CONVENIENCE METHODS: grunts
     # =========================================================================
     
-    def add_entity(
+    def add_grunt(
         self,
-        entity_id: str,
+        grunt_id: str,
         name: str,
-        entity_type: Literal["monster", "npc", "creature"] = "creature",
+        grunt_type: Literal["monster", "npc", "creature"] = "creature",
         room_id: str | None = None,
         **data
     ) -> None:
-        """Add an entity, optionally placing it in a room."""
-        self.add_node(entity_id, NodeType.ENTITY, name=name, entity_type=entity_type, **data)
+        """Add an grunt, optionally placing it in a room."""
+        self.add_node(grunt_id, NodeType.GRUNT, name=name, grunt_type=grunt_type, **data)
         if room_id and self.has_node(room_id):
-            self.add_edge(entity_id, room_id, EdgeType.LOCATED_IN)
+            self.add_edge(grunt_id, room_id, EdgeType.LOCATED_IN)
     
-    def move_entity(self, entity_id: str, new_room_id: str) -> bool:
-        """Move an entity to a new room."""
-        if not self.has_node(entity_id) or not self.has_node(new_room_id):
+    def move_grunt(self, grunt_id: str, new_room_id: str) -> bool:
+        """Move an grunt to a new room."""
+        if not self.has_node(grunt_id) or not self.has_node(new_room_id):
             return False
         
         # Remove existing location edges
-        current_locations = self.get_outgoing_edges(entity_id, EdgeType.LOCATED_IN)
+        current_locations = self.get_outgoing_edges(grunt_id, EdgeType.LOCATED_IN)
         for room_id, edge_data in current_locations:
-            self.remove_edge(entity_id, room_id, EdgeType.LOCATED_IN)
+            self.remove_edge(grunt_id, room_id, EdgeType.LOCATED_IN)
         
         # Add new location
-        self.add_edge(entity_id, new_room_id, EdgeType.LOCATED_IN)
+        self.add_edge(grunt_id, new_room_id, EdgeType.LOCATED_IN)
         return True
     
-    def get_entity_location(self, entity_id: str) -> str | None:
-        """Get the room ID where an entity is located."""
-        locations = self.get_outgoing_edges(entity_id, EdgeType.LOCATED_IN)
+    def get_grunt_location(self, grunt_id: str) -> str | None:
+        """Get the room ID where an grunt is located."""
+        locations = self.get_outgoing_edges(grunt_id, EdgeType.LOCATED_IN)
         return locations[0][0] if locations else None
     
-    def get_entities_in_room(self, room_id: str) -> list[str]:
-        """Get all entity IDs in a room."""
+    def get_grunts_in_room(self, room_id: str) -> list[str]:
+        """Get all grunt IDs in a room."""
         return [
             source_id for source_id, _ 
             in self.get_incoming_edges(room_id, EdgeType.LOCATED_IN)
@@ -450,28 +451,28 @@ class WorldGraph:
     
     def add_relationship(
         self,
-        entity1_id: str,
-        entity2_id: str,
+        grunt1_id: str,
+        grunt2_id: str,
         relationship_type: str = "knows",
         bidirectional: bool = True
     ) -> None:
-        """Add a relationship between two entities."""
-        self.add_edge(entity1_id, entity2_id, EdgeType.KNOWS, relationship=relationship_type)
+        """Add a relationship between two grunts."""
+        self.add_edge(grunt1_id, grunt2_id, EdgeType.FRIENDLY, relationship=relationship_type)
         if bidirectional:
-            self.add_edge(entity2_id, entity1_id, EdgeType.KNOWS, relationship=relationship_type)
+            self.add_edge(grunt2_id, grunt1_id, EdgeType.FRIENDLY, relationship=relationship_type)
     
-    def entity_learns(self, entity_id: str, lore_id: str) -> bool:
-        """Record that an entity learns about a piece of lore."""
-        if not self.has_node(entity_id) or not self.has_node(lore_id):
+    def grunt_learns(self, grunt_id: str, lore_id: str) -> bool:
+        """Record that an grunt learns about a piece of lore."""
+        if not self.has_node(grunt_id) or not self.has_node(lore_id):
             return False
-        self.add_edge(entity_id, lore_id, EdgeType.KNOWS_ABOUT)
+        self.add_edge(grunt_id, lore_id, EdgeType.KNOWS_ABOUT)
         return True
     
-    def get_entity_knowledge(self, entity_id: str) -> list[str]:
-        """Get all lore IDs that an entity knows about."""
+    def get_grunt_knowledge(self, grunt_id: str) -> list[str]:
+        """Get all lore IDs that an grunt knows about."""
         return [
             target_id for target_id, _ 
-            in self.get_outgoing_edges(entity_id, EdgeType.KNOWS_ABOUT)
+            in self.get_outgoing_edges(grunt_id, EdgeType.KNOWS_ABOUT)
         ]
     
     def link_story_moments(self, moment1_id: str, moment2_id: str) -> None:

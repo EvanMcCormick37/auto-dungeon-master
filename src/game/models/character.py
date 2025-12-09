@@ -51,7 +51,7 @@ class Entity(Base):
     ac: int
     actions: List[Action | str] | None
     attacks: List[Attack | str] | None
-# Dynamic stats for instantiated Grunt enemies.
+# Instantiated Entities, generic enemies with no lore or character attached.
 class Grunt(Base):
     hp: int
     morale: int

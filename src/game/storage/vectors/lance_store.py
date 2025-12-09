@@ -6,7 +6,6 @@ Provides embedding-based retrieval for RAG context assembly.
 
 import json
 from pathlib import Path
-from typing import Any, Literal
 from dataclasses import dataclass
 from enum import Enum
 
@@ -653,22 +652,6 @@ class VectorStore:
             filters.append(f"region = '{region}'")
         filter_sql = " AND ".join(filters) if filters else None
         return self.search(VectorCollection.LORE, query, k=k, filter_sql=filter_sql)
-    
-    def search_dm_styles(
-        self,
-        query: str,
-        style: str | None = None,
-        context: str | None = None,
-        k: int = 5
-    ) -> list[SearchResult]:
-        """Search DM style examples."""
-        filters = []
-        if style:
-            filters.append(f"style = '{style}'")
-        if context:
-            filters.append(f"context = '{context}'")
-        filter_sql = " AND ".join(filters) if filters else None
-        return self.search(VectorCollection.DM_STYLES, query, k=k, filter_sql=filter_sql)
     
     def get_similar_entities(
         self,

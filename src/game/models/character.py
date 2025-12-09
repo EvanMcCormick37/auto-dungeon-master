@@ -51,7 +51,7 @@ class Entity(Base):
     ac: int
     actions: List[Action | str] | None
     attacks: List[Attack | str] | None
-# Instantiated Entities, generic enemies with no lore or character attached.
+# generic Instantiated Entities with no lore or character attached. Often multiple Grunts will be instantiated for one encounter. Also useful for random encounters.
 class Grunt(Base):
     hp: int
     morale: int

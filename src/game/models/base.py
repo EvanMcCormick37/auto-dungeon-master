@@ -1,12 +1,6 @@
 from typing import List, TypedDict, Tuple
 from enum import Enum
-
-# Basic object models.
-class Base:
-    id: str
-    name: str | None
-    description: str
-
+# Enum Classes
 # Different types of Lore we store in the DB.
 class LoreType(str, Enum):
     POSSIBILITY = "possibility"
@@ -16,17 +10,6 @@ class LoreType(str, Enum):
     LOCATION = "location"
     SECRET = "secret"
     STORY = "story"
-
-# Lore is knowledge of the world, history or characters. Ties together different involved entities.
-class Lore(Base):
-    type: LoreType
-    pc_knows: bool
-    involved: List[str] | None
-
-# A condition which must be met for something to occur. For now essentially just a description. Hard requirements may be added later.
-class Requirement(Base):
-    involved_ids: List[str] | None
-    perception_check: int | None
 # Attributes (D&D standard six)
 class Attribute(str, Enum):
     STR = 'STR'
@@ -43,10 +26,6 @@ class Attributes(TypedDict):
     INT: int
     WIS: int
     CHA: int
-# Temporary or permanent status effects.
-class Status(Base):
-    bonuses: Attributes | None
-
 # Dice.
 class Dice(str, Enum):
     D4 = 'd4'
@@ -65,18 +44,31 @@ class Diceroll(TypedDict):
     D12: int
     D20: int
     D100: int
-
-
 class TargetType(str, Enum):
     MELEE = "melee"         # Targeting
     RANGED = "ranged"       # Targeting
     EFFECT = "effect"       # Nontargeting
     AOE = "aoe"             # Nontargeting
     SELF = "self"           # Nontargeting
+
+
+# Object Classes
+# Basic object model.
+class Base:
+    id: str
+    name: str | None
+    description: str
+
+# Temporary or permanent status effects.
+class Status(Base):
+    bonuses: Attributes | None
+
 # A possible action to take.
 class Action(Base):
     type: TargetType | None
     base_attribute: Attribute | None
+
+# Attack action.
 class AttackStats:
     damage: Diceroll
     attack_bonus: int | None
@@ -86,7 +78,6 @@ class AttackStats:
     on_success: Status | None
     on_hit: Status | None
     on_crit: Status | None
-# Attack actions.
 class Attack(Action):
     attack_stats: AttackStats
 
@@ -95,7 +86,17 @@ class Feat(Base):
     status: Status | None
     actions: List[Action] | None
 
-# Simple item and Weapon classes
+# A condition which must be met for something to occur. Could be contained in Description, could be a skill check. Requirements checked by cross-encoder.
+class Requirement(Base):
+    involved_ids: List[str] | None
+    check: dict[Attribute: int]
+# Lore is knowledge of the world, history or characters. Ties together different involved entities.
+class Lore(Base):
+    type: LoreType
+    pc_knows: Requirement | bool = True
+    involved: List[str] | None
+
+# Simple Item and Weapon classes
 class Item:
     id: str
     name: str
@@ -106,7 +107,6 @@ class Item:
     uses: List[Action] | None
     effects: List[Status] | None
     hidden: Requirement | bool = False
-
 class Weapon(Item):
     base_attribute: Attribute | None
     damage_roll: Diceroll | None

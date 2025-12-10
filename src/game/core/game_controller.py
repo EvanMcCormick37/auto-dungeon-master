@@ -1,105 +1,140 @@
+from uuid import uuid4
+from typing import List
+
 from src.game.core.resolution_engine import ResolutionEngine
 from src.game.core.action_queue import ActionQueue
 from src.game.core.state_manager import StateManager
 from src.game.models import Action, Resolution
-from src.game.llm import GMOracle, NarratorOracle
-from typing import List
-from uuid import uuid4
+from src.game.llm import NarratorOracle, GMOracle
+
 
 class GameController:
     """
     Main game loop coordinator.
-    Manages the flow: Intent → Plan → Execute → Narrate → State Update
+    Orchestrates player actions, enemy turns, and combat flow.
     """
     
     def __init__(
         self,
-        gm_oracle: GMOracle,           # LLM interface for interpretation
+        gm_oracle: GMOracle,
         resolution_engine: ResolutionEngine,
         state_manager: StateManager,
-        narrator: NarratorOracle             # LLM interface for prose generation
+        narrator_oracle: NarratorOracle
     ):
-        self.dm = gm_oracle
+        self.gm = gm_oracle
         self.engine = resolution_engine
         self.state = state_manager
-        self.narrator = narrator
+        self.narrator = narrator_oracle
         self.action_queue = ActionQueue()
         self.narration_buffer: List[str] = []
+        self.turn_based = False
     
     def process_player_input(self, text: str) -> str:
-        """
-        Main entry point for player commands.
-        Returns the full narration of what happened.
-        """
+        """Main entry point for player commands."""
+        self.narration_buffer.clear()
         
-        # 2. Create Action and queue it
-        action = Action(
-            id=f"action_{uuid4().hex[:8]}",
-            owner_id="player",
-            intent_text=text,
-            priority=0
-        )
-        self.action_queue.enqueue(action)
-        
-        # 3. Process all queued actions (including reactions)
+        # 1. Process Player
+        self._enqueue_action(owner_id="player", text=text)
         self._process_queue()
         
-        # 4. Generate final narration
-        final_narration = self.narrator.compose_narration(
+        # 2. Check & Handle Combat
+        self.turn_based = self.state.has_hostile_entities_in_room()
+        
+        if self.turn_based:
+            self._process_enemy_turns()
+            
+            if result := self._check_combat_result():
+                self.narration_buffer.append(result)
+                self.turn_based = False
+        # 3. Finalize Output
+        narration = self.narrator.compose_narration(
             self.narration_buffer,
             self.state.get_current_state()
         )
-        
-        # 5. Clear buffer and return
-        self.narration_buffer.clear()
-        return final_narration
+        # Check for end of combat.
+        combat_result = self._check_combat_result()
+        return f"{narration}{combat_result}"
     
-    def _process_queue(self):
-        """Process all actions in queue until empty"""
-        max_iterations = 50  # Safety limit
+    def _enqueue_action(self, owner_id: str, text: str, priority: int = 0) -> None:
+        """Helper to create and queue an Action object."""
+        action = Action(
+            id=f"action_{uuid4().hex[:8]}",
+            owner_id=owner_id,
+            intent_text=text,
+            priority=priority
+        )
+        self.action_queue.enqueue(action)
+
+    def _process_enemy_turns(self) -> None:
+        """Process actions for all alive enemies."""
+        for enemy in self.state.get_alive_enemies_in_room():
+            if not self._is_player_alive():
+                break
+            
+            intent = self.gm.generate_enemy_action(enemy, self.state.get_current_state())
+            if intent:
+                self._enqueue_action(owner_id=enemy.id, text=intent)
+                self._process_queue()
+
+    def _process_queue(self) -> None:
+        """Process actions until queue is empty or safety limit reached."""
         iterations = 0
+        max_iterations = 50 
         
-        while not self.action_queue.is_empty() and iterations < max_iterations:
+        while not self.action_queue.is_empty():
+            if iterations >= max_iterations:
+                self.narration_buffer.append("[The chaos becomes too complex to follow...]")
+                break
+
+            self._resolve_action(self.action_queue.dequeue())
             iterations += 1
-            action = self.action_queue.dequeue()
-            
+
+    def _resolve_action(self, action: Action) -> None:
+        """Execute the Intent -> Plan -> Execute -> State pipeline for a single action."""
+        try:
             # Phase 1: INTERPRET (LLM)
-            # DM interprets the intent and creates an ActionPlan
-            relevant_state = self.state.get_relevant_context(action)
-            action.plan = self.dm.interpret_action(action.intent_text, relevant_state)
+            context = self.state.get_relevant_context(action)
+            action.plan = self.gm.interpret_action(action.intent_text, context)
             
-            # Handle invalid/impossible actions
             if action.plan is None:
-                self.narration_buffer.append(
-                    self.dm.explain_invalid_action(action.intent_text, relevant_state)
-                )
-                continue
-            
+                self.narration_buffer.append(self.gm.explain_invalid_action(action.intent_text, context))
+                return
+
             # Phase 2: EXECUTE (Engine)
-            # Mechanical resolution—no LLM here
             action.resolution = Resolution(action_plan=action.plan)
             action.resolution = self.engine.execute_plan(action.resolution)
             
-            # Collect narration fragments from rolls
-            self.narration_buffer.extend(action.resolution.narration_fragments)
+            if action.resolution.narration_fragments:
+                self.narration_buffer.extend(action.resolution.narration_fragments)
             
-            # Phase 3: APPLY STATE CHANGES
+            # Phase 3: APPLY STATE
             for change in action.resolution.pending_state_changes:
                 self.state.apply_change(change)
             
-            # Phase 4: QUEUE REACTIONS
-            # These will be processed in subsequent iterations
+            # Phase 4: REACT
             for reaction in action.resolution.triggered_reactions:
-                # Get DM to flesh out the reaction intent
-                reaction.intent_text = self.dm.describe_reaction(
-                    reaction.owner_id,
-                    action,
-                    self.state.get_entity(reaction.owner_id)
+                desc = self.gm.describe_reaction(
+                    reaction.owner_id, action, self.state.get_entity(reaction.owner_id)
                 )
+                # Queue reactions as new actions
+                # Note: Reaction objects usually have their own method to convert to Action, 
+                # but following your logic we treat them as intents here.
+                reaction.intent_text = desc 
                 self.action_queue.enqueue_reaction(reaction)
+
+        except Exception as e:
+            self.narration_buffer.append(f"[An error occurred processing action: {str(e)}]")
+
+    def _check_combat_result(self) -> str | None:
+        """Return narration if combat resolved, otherwise None."""
+        if not self._is_player_alive():
+            return "\n[DEFEAT: You have fallen unconscious. Game Over.]"
         
-        if iterations >= max_iterations:
-            # Safety: prevent infinite loops
-            self.narration_buffer.append(
-                "[The chaos of battle becomes too complex to follow...]"
-            )
+        if not self.state.has_hostile_entities_in_room():
+            return "\n[VICTORY: All enemies have been defeated!]"
+        
+        return None
+    
+    def _is_player_alive(self) -> bool:
+        player = self.state.get_player_character()
+        return player.hp > 0 if player else False

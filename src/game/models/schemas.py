@@ -1,5 +1,5 @@
-from typing import List, TypedDict
-from dataclasses import dataclass, field
+from typing import TypedDict
+from dataclasses import dataclass
 from enum import Enum
 # Enum Classes
 class Attribute(str, Enum):         # Attributes (D&D standard six)

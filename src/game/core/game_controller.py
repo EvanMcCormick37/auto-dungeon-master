@@ -1,6 +1,8 @@
 from src.game.core.resolution_engine import ResolutionEngine
 from src.game.core.action_queue import ActionQueue
+from src.game.core.state_manager import StateManager
 from src.game.models import Action, Resolution
+from src.game.llm import GMOracle, NarratorOracle
 from typing import List
 from uuid import uuid4
 
@@ -12,12 +14,12 @@ class GameController:
     
     def __init__(
         self,
-        dm_oracle: 'DMOracle',           # LLM interface for interpretation
+        gm_oracle: GMOracle,           # LLM interface for interpretation
         resolution_engine: ResolutionEngine,
-        state_manager: 'StateManager',
-        narrator: 'Narrator'              # LLM interface for prose generation
+        state_manager: StateManager,
+        narrator: NarratorOracle             # LLM interface for prose generation
     ):
-        self.dm = dm_oracle
+        self.dm = gm_oracle
         self.engine = resolution_engine
         self.state = state_manager
         self.narrator = narrator

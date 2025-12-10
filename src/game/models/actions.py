@@ -43,7 +43,7 @@ class RollSpec(BaseModel):
 class RollResult(BaseModel):
     """Result of rolling a RollSpec"""
     spec: RollSpec                          # Spec which generated this result
-    result: int
+    roll: int
     outcome: RollOutcome
     state_changes: List[StateChange]
 # ============================================================

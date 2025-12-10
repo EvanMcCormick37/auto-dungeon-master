@@ -17,9 +17,9 @@ class GameController:
     def __init__(
         self,
         gm_oracle: GMOracle,
+        narrator_oracle: NarratorOracle,
         resolution_engine: ResolutionEngine,
-        state_manager: StateManager,
-        narrator_oracle: NarratorOracle
+        state_manager: StateManager
     ):
         self.gm = gm_oracle
         self.engine = resolution_engine
@@ -38,7 +38,7 @@ class GameController:
         self._process_queue()
         
         # 2. Check & Handle Combat
-        self.turn_based = self.state.has_hostile_entities_in_room()
+        self.turn_based = self.state.get_alive_enemies_in_room()
         
         if self.turn_based:
             self._process_enemy_turns()
@@ -68,10 +68,8 @@ class GameController:
     def _process_enemy_turns(self) -> None:
         """Process actions for all alive enemies."""
         for enemy in self.state.get_alive_enemies_in_room():
-            if not self._is_player_alive():
-                break
             
-            intent = self.gm.generate_enemy_action(enemy, self.state.get_current_state())
+            intent = self.gm.generate_entity_intent(enemy, self.state.get_current_state())
             if intent:
                 self._enqueue_action(owner_id=enemy.id, text=intent)
                 self._process_queue()
@@ -93,7 +91,7 @@ class GameController:
         """Execute the Intent -> Plan -> Execute -> State pipeline for a single action."""
         try:
             # Phase 1: INTERPRET (LLM)
-            context = self.state.get_relevant_context(action)
+            context = self.state.get_current_state
             action.plan = self.gm.interpret_action(action.intent_text, context)
             
             if action.plan is None:

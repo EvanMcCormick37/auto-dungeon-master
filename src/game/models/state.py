@@ -11,10 +11,10 @@ class AttackStats:
 
 @dataclass
 class Item(Base):
-    hp: Tuple[str,str]
+    hp: Tuple[int,int]
     cost: int
     weight: int
-    effects: List[Status] = []
+    effects: List[Status]
     attack_stats: AttackStats | None
 
 # # Conversation History classes for PC and NPC conversations

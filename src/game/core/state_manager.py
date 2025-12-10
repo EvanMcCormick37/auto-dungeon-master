@@ -1,7 +1,7 @@
 # src/game/core/state_manager.py
 
 import logging
-from typing import Any
+from typing import Any, List
 from src.game.models import GameState, PlayerCharacter, Entity, Item, Room, StateChange
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,23 @@ class StateManager:
                     return item
 
         return None
+    
+    def get_alive_enemies_in_room(self) -> List[Entity]:
+        """
+        Returns a list of the living entities in the current room (hp > 0).
+        Assumes all Entities in the room are enemies.
+        """
+        room = self._state.location
+        alive_enemies = []
+
+        if not room.occupants:
+            return alive_enemies
+
+        for entity in room.occupants:
+            if entity.hp > 0:
+                alive_enemies.append(entity)
+
+        return alive_enemies
 
     def apply_change(self, change: StateChange) -> None:
         """

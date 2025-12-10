@@ -1,7 +1,98 @@
-from src.game.models.character import PlayerCharacter, Entity, Conversation
-from src.game.models.location import Room, Level
+from src.game.models.schemas import Base, Attribute, Attributes, Status, Feat
 from datetime import datetime
-from typing import List
+from typing import List, Tuple
+
+# Simple Item and Weapon classes
+class AttackStats:
+    range: int
+    base_attribute: Attribute
+    damage: str
+
+class Item(Base):
+    hp: Tuple[str,str]
+    cost: int
+    weight: int
+    effects: List[Status] | None
+    attack_stats: AttackStats | None
+
+# # Conversation History classes for PC and NPC conversations
+# class Message:
+#     text: str
+#     speaker_id: str
+#     listener_id: str
+# class Conversation:
+#     id: str
+#     messages: List[Message]
+# class ConversationSummary(Base):
+#     pass
+
+# PC Stats 
+class PlayerCharacter:
+    # Static Stats
+    _class: str
+    level: int
+    attributes: Attributes
+    max_hp: int
+    ac: int
+    capacity: int
+    feats: List[Feat]
+    # spells: List[Lore | str] | None
+    # Semi-Dynamic Stats (Status + Roleplay)
+    # knowledge: List[Lore | str] | None
+    # memories: List[Lore | str] | None
+    # prior_conversations: List[Conversation | ConversationSummary] | None
+    # Inventory and Experience
+    xp: Tuple [int,int]
+    gold: int
+    inventory: List[Item]
+    # Dynamic Stats (Combat)
+    equipped: List[Item]
+    spell_slots: List[int] | None
+    # to_notice: Requirement | None
+    conditions: List[Status] | None
+    hp: int
+# NPCs and Monsters
+class Entity(Base):
+    xp: int | None
+    attributes: Attributes
+    max_hp: int
+    max_morale: int
+    ac: int
+class Grunt(Entity):
+    hp: int
+    morale: int
+    conditions: List[Status | str] | None
+    inventory: List[Item | str] | None
+    equipped: List[Item | str] | None
+    # to_notice: Requirement | None
+# class Character(Grunt):
+#     disposition: str
+#     prior_conversations: List[Conversation | ConversationSummary] | None
+#     feats: List[Feat | str] | None
+#     # lore: List[Lore | str] | None
+
+# Locations
+class Location(Base):
+    # possibilities: List[Lore] | None
+    is_explored: bool
+# class Door(Location):
+#     next_room_id: str                       # ID of connecting room.
+#     is_open: bool
+#     locked: Requirement | None
+#     to_notice: Requirement | None
+class Room(Location):
+    # doors: List[Door | str] | None
+    occupants: List[Entity | str] | None
+    items: List[Item | str] | None
+class Level(Base):
+    room_ids: List[str]
+    # hooks: List[Lore] | None
+    effects: List[Status] | None
+
+# class Trap(Base):
+#     to_notice: Requirement | None      # Anything to_notice must have Requirement met to be seen
+#     to_trigger: Requirement | None     # Trap must have requirement met to be triggered.
+#     attack_stats: AttackStats
 
 class CombatantStatus:
     entity: Entity

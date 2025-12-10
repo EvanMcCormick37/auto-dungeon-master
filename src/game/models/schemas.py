@@ -1,4 +1,5 @@
-from typing import List, TypedDict, Tuple
+from typing import List, TypedDict
+from dataclasses import dataclass, field
 from enum import Enum
 # Enum Classes
 class Attribute(str, Enum):         # Attributes (D&D standard six)
@@ -8,6 +9,7 @@ class Attribute(str, Enum):         # Attributes (D&D standard six)
     INT = 'INT'
     WIS = 'WIS'
     CHA = 'CHA'
+@dataclass
 class Attributes(TypedDict):        # Set of attribute values for an entity.
     STR: int
     DEX: int
@@ -23,6 +25,7 @@ class Dice(str, Enum):              # Dice.
     D12 = 'd12'
     D20 = 'd20'
     D100 = 'd100'
+@dataclass
 class Diceset(TypedDict):          # Dict for keeping track of damage or saving throw rolls.
     D4: int
     D6: int
@@ -31,7 +34,7 @@ class Diceset(TypedDict):          # Dict for keeping track of damage or saving 
     D12: int
     D20: int
     D100: int
-class Target():            # Type of targeting used by actions, attacks, and spells
+class Target(str, Enum):            # Type of targeting used by actions, attacks, and spells
     MELEE = "melee"                     # --Targeting   --Single    --Local
     RANGED = "ranged"                   # --Targeting   --Single    --Ranged
     TOUCH = "touch"                     # --Nontargeting--Single    --Local
@@ -46,31 +49,23 @@ class Genre(str, Enum):             # Different types of Lore we store in the DB
 
 # Object Classes
 # Basic object model.
+@dataclass
 class Base:
     id: str
     name: str | None
     description: str
+@dataclass
 class Status(Base):
     bonuses: Attributes | None
-# A condition which must be met for something to occur. Could be contained in Description, could be a skill check. Requirements checked by cross-encoder.
-class Requirement(Base):
-    checks: dict[Attribute: int]
-
-# Feat representing a power or ability.
-class Feat(Base):
-    status: Status | None
-    actions: List[Action] | None
-# Lore is knowledge of the world, history or characters. Ties together different involved entities|items|locations.
-class Lore(Base):
-    genre: Genre
-    pc_knows: Requirement | bool = True
-    involved: List[str] | None
-
-
-
+    is_feat: bool
 
 
 #  EXTRAS: -- Save for later after I work out the actual engine logic of this game
+# # Lore is knowledge of the world, history or characters. Ties together different involved entities|items|locations.
+# class Lore(Base):
+#     genre: Genre
+#     pc_knows: Requirement | bool = True
+#     involved: List[str] | None
 # # Magic and Enchanted Items 
 # class School(str, Enum):
 #     ABJURATION = 'Abjuration'

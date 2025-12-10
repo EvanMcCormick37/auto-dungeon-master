@@ -1,8 +1,9 @@
-from enum import Enum, auto
-from typing import Optional, List, Callable, Set, Any, Union
-from pydantic import BaseModel, Field
+from enum import Enum
+from typing import List, Set, Any
+from pydantic import BaseModel
 from abc import ABC, abstractmethod
-from src.game.models.actions import *
+from src.game.models.actions import StateChange, RollSpec, RollType, Action, ActionPlan, ActionType
+from src.game.models.state import GameState, Entity
 
 # ============================================================
 # TRIGGER EVENT TYPES
@@ -35,6 +36,16 @@ class TriggerEvent(Enum):
     ROUND_START = "round_start"         # Combat round beginning
     ROUND_END = "round_end"           # Combat round ending
 
+class TriggerContext(BaseModel):
+    """Context passed to triggers during evaluation"""
+    actor_id: str                          # Who did something
+    event_type: TriggerEvent               # What kind of event
+    state: GameState                     # Current game state
+    current_turn: int                      # For cooldown tracking
+    triggering_action: Action | None  # The action that caused this
+    
+    class Config:
+        arbitrary_types_allowed = True
 # ============================================================
 # CONDITIONS (Predicates)
 # ============================================================
@@ -46,7 +57,7 @@ class Condition(BaseModel, ABC):
     """
     
     @abstractmethod
-    def evaluate(self, context: 'TriggerContext') -> bool:
+    def evaluate(self, context: TriggerContext) -> bool:
         """Return True if this condition is met"""
         pass
     
@@ -63,7 +74,7 @@ class AttributeCondition(Condition):
     operator: str  # ">=", "<=", "==", "!=", ">", "<"
     value: Any
     
-    def evaluate(self, ctx: 'TriggerContext') -> bool:
+    def evaluate(self, ctx: TriggerContext) -> bool:
         entity = ctx.state.get_entity(self.entity_id)
         if not entity:
             return False
@@ -90,7 +101,7 @@ class ProximityCondition(Condition):
     target_id: str  # Location or entity ID
     max_distance: int = 1  # In grid squares/zones
     
-    def evaluate(self, ctx: 'TriggerContext') -> bool:
+    def evaluate(self, ctx: TriggerContext) -> bool:
         return ctx.state.distance_between(ctx.actor_id, self.target_id) <= self.max_distance
     
     def describe(self) -> str:
@@ -101,7 +112,7 @@ class ActionTypeCondition(Condition):
     """Check if the triggering action is of a specific type"""
     action_types: Set[ActionType]
     
-    def evaluate(self, ctx: 'TriggerContext') -> bool:
+    def evaluate(self, ctx: TriggerContext) -> bool:
         if ctx.triggering_action is None:
             return False
         return ctx.triggering_action.plan.action_type in self.action_types
@@ -114,7 +125,7 @@ class TargetCondition(Condition):
     """Check if a specific entity is the target of an action"""
     entity_id: str
     
-    def evaluate(self, ctx: 'TriggerContext') -> bool:
+    def evaluate(self, ctx: TriggerContext) -> bool:
         if ctx.triggering_action is None:
             return False
         return self.entity_id in ctx.triggering_action.plan.target_ids
@@ -128,7 +139,7 @@ class HasItemCondition(Condition):
     entity_id: str
     item_id: str
     
-    def evaluate(self, ctx: 'TriggerContext') -> bool:
+    def evaluate(self, ctx: TriggerContext) -> bool:
         entity = ctx.state.get_entity(self.entity_id)
         return entity and self.item_id in entity.inventory
     
@@ -141,7 +152,7 @@ class CompositeCondition(Condition):
     conditions: List[Condition]
     operator: str = "AND"  # "AND" or "OR"
     
-    def evaluate(self, ctx: 'TriggerContext') -> bool:
+    def evaluate(self, ctx: TriggerContext) -> bool:
         if self.operator == "AND":
             return all(c.evaluate(ctx) for c in self.conditions)
         else:
@@ -174,9 +185,9 @@ class TriggerCheck(BaseModel):
     
     # What happens on failure?
     reveal_on_failure: bool = False  # Does failure reveal something exists?
-    failure_hint: Optional[str] = None  # "You sense something is off..."
+    failure_hint: str | None  # "You sense something is off..."
 
-    def to_roll_spec(self, actor: 'Entity') -> RollSpec:
+    def to_roll_spec(self, actor: Entity) -> RollSpec:
         """Convert to a RollSpec for the resolution engine"""
         modifier = actor.get_skill_modifier(self.check_type)
         return RollSpec(
@@ -195,7 +206,7 @@ class TriggerEffect(BaseModel, ABC):
     """What happens when a trigger activates"""
     
     @abstractmethod
-    def to_actions(self, ctx: 'TriggerContext') -> List[Action]:
+    def to_actions(self, ctx: TriggerContext) -> List[Action]:
         """Generate the actions this effect produces"""
         pass
 
@@ -206,7 +217,7 @@ class SpawnActionEffect(TriggerEffect):
     intent_template: str  # Can include {variables}
     priority: int = 50    # Higher than normal (0) but lower than reactions (100)
     
-    def to_actions(self, ctx: 'TriggerContext') -> List[Action]:
+    def to_actions(self, ctx: TriggerContext) -> List[Action]:
         # Interpolate template with context
         intent = self.intent_template.format(
             actor=ctx.actor_id,
@@ -225,7 +236,7 @@ class StateChangeEffect(TriggerEffect):
     """Directly modify state without going through action resolution"""
     changes: List[StateChange]
     
-    def to_actions(self, ctx: 'TriggerContext') -> List[Action]:
+    def to_actions(self, ctx: TriggerContext) -> List[Action]:
         # This is a "pseudo-action" that just applies state changes
         # We wrap it so it goes through the normal flow
         action = Action(
@@ -250,7 +261,7 @@ class RevealEffect(TriggerEffect):
     entity_id: str
     revelation_text: str  # What the player perceives
     
-    def to_actions(self, ctx: 'TriggerContext') -> List[Action]:
+    def to_actions(self, ctx: TriggerContext) -> List[Action]:
         return [Action(
             id=f"reveal_{self.entity_id}",
             owner_id="system",
@@ -263,7 +274,7 @@ class CompositeEffect(TriggerEffect):
     """Multiple effects that all fire together"""
     effects: List[TriggerEffect]
     
-    def to_actions(self, ctx: 'TriggerContext') -> List[Action]:
+    def to_actions(self, ctx: TriggerContext) -> List[Action]:
         actions = []
         for effect in self.effects:
             actions.extend(effect.to_actions(ctx))
@@ -288,14 +299,14 @@ class Trigger(BaseModel):
     trigger_events: Set[TriggerEvent]      # What events cause evaluation
     
     # WHERE is this trigger active?
-    location_id: Optional[str] = None      # None = anywhere
-    attached_to: Optional[str] = None      # Entity ID if attached to something
+    location_id: str | None      # None = anywhere
+    attached_to: str | None      # Entity ID if attached to something
     
     # WHAT conditions must be met?
     conditions: List[Condition] = []       # All must pass (implicit AND)
     
     # OPTIONAL: Skill check gate
-    check: Optional[TriggerCheck] = None   # If present, must pass to activate
+    check: TriggerCheck | None   # If present, must pass to activate
     
     # WHAT happens when triggered?
     effect: TriggerEffect
@@ -306,7 +317,7 @@ class Trigger(BaseModel):
     cooldown_turns: int = 0                # Turns before can trigger again
     last_triggered_turn: int = -999        # Track cooldown
     
-    def evaluate(self, ctx: 'TriggerContext') -> 'TriggerEvaluation':
+    def evaluate(self, ctx: TriggerContext) -> 'TriggerEvaluation':
         """
         Evaluate whether this trigger should activate.
         Returns an evaluation result with all the details.
@@ -349,17 +360,5 @@ class TriggerEvaluation(BaseModel):
     """Result of evaluating a trigger"""
     trigger: Trigger
     activated: bool
-    pending_check: Optional[TriggerCheck] = None
+    pending_check: TriggerCheck | None
     reason: str = ""
-
-
-class TriggerContext(BaseModel):
-    """Context passed to triggers during evaluation"""
-    actor_id: str                          # Who did something
-    event_type: TriggerEvent               # What kind of event
-    state: 'GameState'                     # Current game state
-    current_turn: int                      # For cooldown tracking
-    triggering_action: Optional[Action] = None  # The action that caused this
-    
-    class Config:
-        arbitrary_types_allowed = True

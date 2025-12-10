@@ -1,4 +1,7 @@
-from src.game.models.actions import *
+from src.game.models import Entity, Action, ActionType, ActionPlan, GameState, RollType, RollSpec, StateChange
+from src.game.llm.prompts import GMPrompts
+from src.game.llm.exceptions import JSONExtractionError, ActionPlanParseError, ValidationFailedError
+from src.game.llm.client import OllamaClient
 import json
 import re
 import logging
@@ -14,19 +17,20 @@ class DMOracle:
     Handles interpretation of intents into structured ActionPlans.
     """
     
-    def __init__(self, llm_client: 'OllamaClient'):
+    def __init__(self, llm_client: OllamaClient):
         self.llm = llm_client
-    
+
+
     def interpret_action(
         self, 
         intent_text: str, 
-        context: 'GameContext'
+        context: GameState
     ) -> ActionPlan | None:
         """
         Ask the DM to interpret a player's intent.
         Returns a structured ActionPlan or None if action is invalid.
         """
-        prompt = self._build_interpretation_prompt(intent_text, context)
+        prompt = GMPrompts.INTERPRETATION_PROMPT.format(context=context, intent=intent_text)
         
         # Request structured output from LLM
         response = self.llm.generate(
@@ -35,100 +39,25 @@ class DMOracle:
         )
         
         return self._parse_action_plan(response)
-    
-    def _build_interpretation_prompt(self, intent: str, ctx: 'GameContext') -> str:
-        return f"""You are the Dungeon Master. Interpret the player's intended action
-and determine what dice rolls are required to resolve it.
 
-CURRENT SITUATION:
-- Location: {ctx.location.description}
-- Player: {ctx.player.name}, {ctx.player.hp}/{ctx.player.max_hp} HP
-- Nearby entities: {[e.name for e in ctx.entities]}
-- Player's equipment: {ctx.player.equipped}
 
-PLAYER'S ACTION: "{intent}"
-
-Determine:
-1. What type of action is this? (ATTACK, CAST, SKILL, INTERACT, MOVE, DIALOGUE, FREE)
-2. Who/what is the target?
-3. What rolls are needed? For each roll, specify:
-   - Roll type (ATTACK, DAMAGE, SAVE, CHECK)
-   - Dice formula (e.g., "1d20+5")
-   - Target DC or AC
-   - Any advantage/disadvantage
-4. Are there conditional rolls? (e.g., "if attack hits, roll damage")
-5. What entities might react to this action?
-6. What state changes occur on success vs failure?
-
-If this action is impossible or doesn't make sense, respond with INVALID and explain why.
-
-Respond in the following JSON format:
-{{
-    "valid": true/false,
-    "invalid_reason": "..." (only if invalid),
-    "action_type": "...",
-    "actor_id": "player",
-    "target_ids": [...],
-    "required_rolls": [
-        {{
-            "roll_type": "ATTACK",
-            "dice": "1d20+5",
-            "target_ac": 13,
-            "reason": "Sword attack against Goblin"
-        }}
-    ],
-    "conditional_rolls": {{
-        "0": [  // If roll at index 0 succeeds
-            {{
-                "roll_type": "DAMAGE",
-                "dice": "1d8+3",
-                "reason": "Longsword damage"
-            }}
-        ]
-    }},
-    "potential_reactions": ["goblin_1"],  // Entity IDs
-    "on_success": [
-        {{"target_id": "goblin_1", "attribute": "hp", "operation": "add", "value": -8}}
-    ],
-    "on_failure": [],
-    "narrative_context": "Player swings their longsword at the goblin"
-}}
-"""
-    
-    def explain_invalid_action(self, intent: str, context: 'GameContext') -> str:
+    def explain_invalid_action(self, intent: str, context: GameState) -> str:
         """Generate a DM explanation for why an action can't be done"""
-        prompt = f"""The player tried to: "{intent}"
-But this isn't possible because of the current situation:
-{context.summary()}
-
-Respond in-character as a Dungeon Master explaining why they can't do this.
-Be helpful and suggest alternatives if appropriate.
-Keep it brief (2-3 sentences)."""
+        prompt = GMPrompts.EXPLAIN_INVALID_ACTION.format(intent=intent,summary=context.summary())
         
         return self.llm.generate(prompt)
-    
+
+
     def describe_reaction(
-        self, 
-        entity_id: str, 
+        self,
         triggering_action: Action,
-        entity: 'Entity'
+        entity: Entity
     ) -> str:
         """Generate the intent text for an entity's reaction"""
-        prompt = f"""An entity is reacting to the player's action.
-
-ENTITY: {entity.name} ({entity.type})
-- Disposition: {entity.disposition}
-- Current HP: {entity.hp}/{entity.max_hp}
-
-PLAYER'S ACTION: {triggering_action.intent_text}
-OUTCOME: {"Success" if triggering_action.resolution.roll_results[-1].success else "Failure"}
-
-What does {entity.name} do in response? Describe their reaction as a simple action intent.
-Example: "The goblin snarls and swings its rusty scimitar at the player"
-
-Respond with just the action description, nothing else."""
+        prompt = GMPrompts.DESCRIBE_REACTION.format(entity=entity,triggering_action=triggering_action)
         
         return self.llm.generate(prompt)
+
 
     def _extract_json_from_response(self, response: str) -> dict:
         """
@@ -291,47 +220,47 @@ Respond with just the action description, nothing else."""
 
 
     def _parse_action_plan(self, llm_response: str) -> ActionPlan:
-    """
-    Parse an LLM response into an ActionPlan object.
-    
-    Args:
-        llm_response: Raw string response from the LLM containing JSON-formatted
-                      action plan data. May include surrounding text or markdown.
-    
-    Returns:
-        ActionPlan: Validated ActionPlan object ready for game engine processing.
-    
-    Raises:
-        JSONExtractionError: If no valid JSON could be extracted from response.
-        ValidationFailedError: If extracted JSON doesn't conform to ActionPlan schema.
-        ActionPlanParseError: For other parsing failures.
-    
-    Example:
-        >>> response = '''
-        ... Here's the action plan:
-        ... ```json
-        ... {
-        ...     "action_type": "attack",
-        ...     "actor_id": "player_1",
-        ...     "target_ids": ["goblin_1"],
-        ...     "required_rolls": [{
-        ...         "made_by": "player_1",
-        ...         "type": "attack_roll",
-        ...         "dice": "1d20+5",
-        ...         "threshold": 13,
-        ...         "advantage": false,
-        ...         "disadvantage": false,
-        ...         "outcomes": {"SUCCESS": [], "FAILURE": []},
-        ...         "explanation": "Melee attack against goblin"
-        ...     }],
-        ...     "narrative_context": "You swing your sword at the goblin."
-        ... }
-        ... ```
-        ... '''
-        >>> plan = parse_action_plan(response)
-        >>> plan.action_type
-        <ActionType.ATTACK: 'attack'>
-    """
+        """
+        Parse an LLM response into an ActionPlan object.
+        
+        Args:
+            llm_response: Raw string response from the LLM containing JSON-formatted
+                        action plan data. May include surrounding text or markdown.
+        
+        Returns:
+            ActionPlan: Validated ActionPlan object ready for game engine processing.
+        
+        Raises:
+            JSONExtractionError: If no valid JSON could be extracted from response.
+            ValidationFailedError: If extracted JSON doesn't conform to ActionPlan schema.
+            ActionPlanParseError: For other parsing failures.
+        
+        Example:
+            >>> response = '''
+            ... Here's the action plan:
+            ... ```json
+            ... {
+            ...     "action_type": "attack",
+            ...     "actor_id": "player_1",
+            ...     "target_ids": ["goblin_1"],
+            ...     "required_rolls": [{
+            ...         "made_by": "player_1",
+            ...         "type": "attack_roll",
+            ...         "dice": "1d20+5",
+            ...         "threshold": 13,
+            ...         "advantage": false,
+            ...         "disadvantage": false,
+            ...         "outcomes": {"SUCCESS": [], "FAILURE": []},
+            ...         "explanation": "Melee attack against goblin"
+            ...     }],
+            ...     "narrative_context": "You swing your sword at the goblin."
+            ... }
+            ... ```
+            ... '''
+            >>> plan = parse_action_plan(response)
+            >>> plan.action_type
+            <ActionType.ATTACK: 'attack'>
+        """
         # Step 1: Extract JSON from response
         try:
             data = self._extract_json_from_response(llm_response)

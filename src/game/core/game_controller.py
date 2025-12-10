@@ -1,3 +1,9 @@
+from src.game.core.resolution_engine import ResolutionEngine
+from src.game.core.action_queue import ActionQueue
+from src.game.models import Action, Resolution
+from typing import List
+from uuid import uuid4
+
 class GameController:
     """
     Main game loop coordinator.
@@ -18,17 +24,11 @@ class GameController:
         self.action_queue = ActionQueue()
         self.narration_buffer: List[str] = []
     
-    def process_player_input(self, command_type: str, text: str) -> str:
+    def process_player_input(self, text: str) -> str:
         """
         Main entry point for player commands.
         Returns the full narration of what happened.
         """
-        # 1. Parse into Intent
-        intent = Intent(
-            owner_id="player",
-            command_type=command_type,  # "try", "say", "askdm"
-            text=text
-        )
         
         # 2. Create Action and queue it
         action = Action(

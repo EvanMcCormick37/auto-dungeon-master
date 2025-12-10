@@ -1,3 +1,6 @@
+from src.game.models import ResolutionStatus, Resolution, RollType, RollResult, Action, ActionPlan
+from typing import List
+
 class ResolutionEngine:
     """
     Executes ActionPlans mechanically. No LLM calls here—
@@ -68,7 +71,7 @@ class ResolutionEngine:
         # Damage rolls don't affect "success"
         primary_rolls = [r for r in resolution.roll_results 
                         if r.spec.roll_type in (RollType.ATTACK, RollType.CHECK, 
-                                                 RollType.SAVE, RollType.CONTEST)]
+                                                 RollType.SAVE)]
         return all(r.success for r in primary_rolls)
     
     def _check_reactions(self, plan: ActionPlan, resolution: Resolution, 

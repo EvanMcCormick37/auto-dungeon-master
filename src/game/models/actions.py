@@ -14,23 +14,15 @@ class StateChange(BaseModel):                   # An actual change to state
     attribute: str             # What's changing ("hp", "position", "inventory")
     operation: str             # "set", "add", "remove", "append"
     value: any                 # The new value or delta
-class ActionType(Enum):
-    ATTACK = "attack"           # Combat attack
-    CAST = "cast"               # Cast a spell
-    SKILL = "skill"             # Skill check (stealth, perception, etc.)
-    INTERACT = "interact"       # Interact with object/environment
-    MOVE = "move"               # Movement
-    SAY = "say"                 # Social interaction
-    OTHER = "other"             # Free actions (drop item, etc.)
+# ============================================================
+# ROLL STRUCTURES
+# ============================================================
 class RollType(Enum):
     """Types of dice rolls"""
     ATTACK = "attack_roll"                  # d20 + modifiers vs AC
     DAMAGE = "damage_roll"                  # Weapon/spell damage dice
     SAVE = "save_roll"                      # Saving throw (d20 vs DC)
     CHECK = "check_roll"                    # Ability/skill check (d20 vs DC)
-# ============================================================
-# ROLL STRUCTURES
-# ============================================================
 class RollOutcome(Enum):
     # CRITICAL_SUCCESS = "critical_success"
     SUCCESS = "success"
@@ -54,6 +46,17 @@ class RollResult(BaseModel):
     result: int
     outcome: RollOutcome
     state_changes: List[StateChange]
+# ============================================================
+# ACTION & RESOLUTION
+# ============================================================
+class ActionType(Enum):
+    ATTACK = "attack"           # Combat attack
+    CAST = "cast"               # Cast a spell
+    SKILL = "skill"             # Skill check (stealth, perception, etc.)
+    INTERACT = "interact"       # Interact with object/environment
+    MOVE = "move"               # Movement
+    SAY = "say"                 # Social interaction
+    OTHER = "other"             # Free actions (drop item, etc.)
 class ResolutionStatus(Enum):
     """Current state of an action's resolution"""
     PENDING = "pending"                     # Waiting to be processed
@@ -61,9 +64,6 @@ class ResolutionStatus(Enum):
     AWAITING_DECISION = "awaiting_decision" # Need DM to interpret outcome
     RESOLVED = "resolved"                   # Complete
     CANCELLED = "cancelled"                 # Invalidated by something
-# ============================================================
-# ACTION & RESOLUTION
-# ============================================================
 class ActionPlan(BaseModel):
     """
     The DM's interpretation of what an action requires.

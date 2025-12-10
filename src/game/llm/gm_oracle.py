@@ -8,10 +8,11 @@ import logging
 from pydantic import ValidationError
 from enum import Enum
 
+
 logger = logging.getLogger(__name__)
 
 
-class DMOracle:
+class GMOracle:
     """
     LLM interface for the Dungeon Master.
     Handles interpretation of intents into structured ActionPlans.

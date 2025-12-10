@@ -14,7 +14,7 @@ class Item(Base):
     hp: Tuple[str,str]
     cost: int
     weight: int
-    effects: List[Status] | None
+    effects: List[Status] = []
     attack_stats: AttackStats | None
 
 # # Conversation History classes for PC and NPC conversations
@@ -31,7 +31,7 @@ class Item(Base):
 # PC Stats 
 @dataclass
 class PlayerCharacter:
-    # Static Stats
+    # Persistent Stats
     _class: str
     level: int
     attributes: Attributes
@@ -39,10 +39,10 @@ class PlayerCharacter:
     ac: int
     capacity: int
     feats: List[Status]
-    # spells: List[Lore | str] | None
+    # spells: List[Lore] | None
     # Semi-Dynamic Stats (Status + Roleplay)
-    # knowledge: List[Lore | str] | None
-    # memories: List[Lore | str] | None
+    # knowledge: List[Lore] | None
+    # memories: List[Lore] | None
     # prior_conversations: List[Conversation | ConversationSummary] | None
     # Inventory and Experience
     xp: Tuple [int,int]
@@ -66,15 +66,15 @@ class Entity(Base):
 class Grunt(Entity):
     hp: int
     morale: int
-    conditions: List[Status | str] | None
-    inventory: List[Item | str] | None
-    equipped: List[Item | str] | None
+    conditions: List[Status] | None
+    inventory: List[Item] | None
+    equipped: List[Item] | None
     # to_notice: Requirement | None
 # class Character(Grunt):
 #     disposition: str
 #     prior_conversations: List[Conversation | ConversationSummary] | None
-#     feats: List[Feat | str] | None
-#     # lore: List[Lore | str] | None
+#     feats: List[Feat] | None
+#     # lore: List[Lore] | None
 
 # Locations
 @dataclass
@@ -88,9 +88,9 @@ class Location(Base):
 #     to_notice: Requirement | None
 @dataclass
 class Room(Location):
-    # doors: List[Door | str] | None
-    occupants: List[Entity | str] | None
-    items: List[Item | str] | None
+    # doors: List[Door] | None
+    occupants: List[Entity] | None
+    items: List[Item] | None
 @dataclass
 class Level(Base):
     room_ids: List[str]
@@ -101,17 +101,6 @@ class Level(Base):
 #     to_notice: Requirement | None      # Anything to_notice must have Requirement met to be seen
 #     to_trigger: Requirement | None     # Trap must have requirement met to be triggered.
 #     attack_stats: AttackStats
-
-@dataclass
-class CombatantStatus:
-    entity: Entity
-    friendly: bool
-
-
-@dataclass
-class Combat:
-    current_active_entity: str
-    combatants: List[CombatantStatus]
 
 @dataclass
 class GameState:
@@ -125,8 +114,8 @@ class GameState:
     player: PlayerCharacter
     
     # Current context (what's immediately relevant)
-    current_level: Level
-    current_room: Room
+    level: Level
+    location: Room
     
     # Active interactions
     # active_combat: Combat | None
@@ -134,3 +123,7 @@ class GameState:
     
     # Recent history (for context)
     recent_actions: list[str]  # last 5-10 actions
+
+    def summary(self) -> str:
+        """Returns a summary of game state easily parseable by the LLM."""
+        ...

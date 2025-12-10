@@ -1,3 +1,6 @@
+from src.game.models import Action
+from collections import deque
+
 class ActionQueue:
     """
     Priority queue for actions. Reactions (high priority) process before 
@@ -20,7 +23,7 @@ class ActionQueue:
         action.priority = 100  # Reactions always process first
         self.enqueue(action)
     
-    def dequeue(self) -> Optional[Action]:
+    def dequeue(self) -> Action | None:
         """Get next action (highest priority first)"""
         for priority in self._priorities:
             queue = self._queues[priority]
@@ -31,7 +34,7 @@ class ActionQueue:
     def is_empty(self) -> bool:
         return all(len(q) == 0 for q in self._queues.values())
     
-    def peek(self) -> Optional[Action]:
+    def peek(self) -> Action | None:
         """Look at next action without removing"""
         for priority in self._priorities:
             queue = self._queues[priority]
